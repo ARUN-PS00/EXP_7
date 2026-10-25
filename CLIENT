@@ -1,0 +1,49 @@
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+
+#define PORT 8080
+#define BUFFER_SIZE 1024
+
+int sockfd;
+
+void *receive_msg(void *arg)
+{
+    char msg[BUFFER_SIZE];
+    int n;
+
+    while ((n = recv(sockfd, msg, BUFFER_SIZE - 1, 0)) > 0)
+    {
+        msg[n] = '\0';
+        printf("%s", msg);
+        fflush(stdout);
+    }
+
+    return NULL;
+}
+
+int main()
+{
+    struct sockaddr_in addr;
+    char msg[BUFFER_SIZE];
+
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+
+    connect(sockfd, (struct sockaddr *)&addr, sizeof(addr));
+
+    pthread_t tid;
+    pthread_create(&tid, NULL, receive_msg, NULL);
+
+    while (fgets(msg, BUFFER_SIZE, stdin))
+        send(sockfd, msg, strlen(msg), 0);
+
+    close(sockfd);
+    return 0;
+}

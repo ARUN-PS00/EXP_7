@@ -1,0 +1,81 @@
+
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <pthread.h>
+
+#define PORT 8080
+#define MAX_CLIENTS 10
+#define BUFFER_SIZE 1024
+
+int clients[MAX_CLIENTS], count = 0;
+pthread_mutex_t lock;
+
+void broadcast(char *msg, int sender)
+{
+    pthread_mutex_lock(&lock);
+
+    for (int i = 0; i < count; i++)
+        if (clients[i] != sender)
+            send(clients[i], msg, strlen(msg), 0);
+
+    pthread_mutex_unlock(&lock);
+}
+
+void *handle_client(void *arg)
+{
+    int sock = *(int *)arg;
+    char buffer[BUFFER_SIZE];
+    int n;
+
+    while ((n = recv(sock, buffer, BUFFER_SIZE - 1, 0)) > 0)
+    {
+        buffer[n] = '\0';
+        broadcast(buffer, sock);
+    }
+
+    close(sock);
+    return NULL;
+}
+
+int main()
+{
+    int server, client;
+    struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
+
+    pthread_mutex_init(&lock, NULL);
+    server = socket(AF_INET, SOCK_STREAM, 0);
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PORT);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    bind(server, (struct sockaddr *)&addr, sizeof(addr));
+    listen(server, 5);
+
+    printf("Server running on port %d\n", PORT);
+
+    while (1)
+    {
+        client = accept(server, (struct sockaddr *)&addr, &len);
+
+        if (client < 0)
+            continue;
+
+        if (count < MAX_CLIENTS)
+        {
+            clients[count] = client;
+            pthread_t tid;
+            pthread_create(&tid, NULL, handle_client, &clients[count]);
+            pthread_detach(tid);
+            count++;
+        }
+        else
+            close(client);
+    }
+
+    close(server);
+    return 0;
+}
